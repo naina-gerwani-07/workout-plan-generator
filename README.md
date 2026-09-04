@@ -80,15 +80,16 @@ workout-plan-generator/
 
 Concatenating the answers into a sentence ("make me a 3 day plan for building
 muscle with no equipment") produces plans that quietly break the constraints. The
-prompt here is built in layers, each one closing a specific failure I hit while
-iterating.
+prompt here is built in layers, each one targeting a specific failure mode. The
+**Iteration log** at the end of this section records what actually happened when
+each layer was tested against real Groq responses.
 
 ### 1. Equipment as an allow-list *and* a forbid-list
 
-Saying *"the user has no equipment"* is not enough — the model still returns
-barbell bench press, because bench press is what "chest day" looks like in its
-training data. So each equipment option carries an explicit list of what's
-available **and** a list of what is forbidden:
+Stating *"the user has no equipment"* leaves the model free to reach for whatever
+"chest day" looks like in its training data — barbell bench press included. So each
+equipment option carries an explicit list of what's available **and** a list of what
+is forbidden:
 
 ```
 AVAILABLE: bodyweight only. Floor space, a wall, a sturdy chair or step…
@@ -99,10 +100,10 @@ range of motion, or higher reps — never added weight.
 ```
 
 That last line matters: taking equipment away leaves the model with no way to make
-things harder, so it reaches for equipment anyway unless you hand it a legal
-alternative. Naming pull-up bars and resistance bands specifically was necessary —
-those two kept slipping into "no equipment" plans because they *feel* like
-bodyweight training.
+training harder, so it reaches for equipment anyway unless you hand it a legal
+alternative. Pull-up bars and resistance bands are named explicitly because they
+*feel* like bodyweight training and are the most likely things to slip into a
+"no equipment" plan.
 
 ### 2. Answers as a spec block, not prose
 
@@ -126,16 +127,16 @@ can refer to fields by name (`DAYS_PER_WEEK`) in its rules.
 "Intermediate" and "build muscle" mean different things to different coaches, so the
 prompt injects the interpretation instead of hoping: rep ranges, rest periods,
 weekly set volume, exercise count per session, and which advanced techniques are
-allowed. Without this, every combination of inputs converged on the same generic
-"3 sets of 10" plan — the plans differed in their *headings* but not their content.
+allowed. Without it, different inputs tend to converge on the same generic
+"3 sets of 10" plan — plans that differ in their *headings* but not their content.
 
 ### 4. A fixed output contract
 
 The reply must follow one markdown template — summary line, then `### Day N` with a
 sets/reps/rest/notes table, warm-up and cool-down, then rest days, a four-week
-progression rule, and practical notes. Specifying the *table columns* is what
-forced real numbers into every row; before that, "as many reps as you can manage"
-appeared constantly.
+progression rule, and practical notes. Specifying the *table columns* is what forces
+real numbers into every row — an open-ended format invites "as many reps as you can
+manage" instead of a prescription.
 
 ### 5. Self-verification before answering
 
@@ -150,8 +151,9 @@ constraints before replying:
 …If any check fails, fix the plan before replying.
 ```
 
-The day-count drift (asking for 2 days and getting 4, because most plans in the
-training data are 4-day plans) largely stopped once this was added.
+This targets day-count drift in particular: ask for 2 days and a model will lean
+towards the 4-day splits that dominate its training data unless it is made to count
+its own sections.
 
 ### 6. Injuries handled by substitution, not warnings
 
@@ -166,12 +168,18 @@ treating or curing anything, no calories or supplements. When injury input is
 present, a short disclaimer is appended as the final line, and the app footer
 carries a standing one.
 
+### Iteration log
+
+_Filled in from real Groq responses — see the test inputs and what each one exposed._
+
+<!-- ITERATION_LOG -->
+
 ### What I'd watch next
 
-Long injury descriptions listing several unrelated limitations are still the
-weakest case — the model tends to honour the first one thoroughly and the later
-ones loosely. A stricter fix would be a second validation pass that re-reads the
-generated plan against the injury list programmatically.
+Long injury descriptions listing several unrelated limitations are the hardest case:
+nothing in the prompt forces the model to account for each limitation separately. A
+stricter fix would be a second programmatic pass that re-reads the generated plan
+against the injury list before it is shown.
 
 ---
 
