@@ -153,13 +153,20 @@ These come from the client's own answers. They are requirements, not preferences
 
 1. DAYS: Produce exactly as many `### Day N` sections as the client's DAYS_PER_WEEK value.
    Not more, not fewer. Number them Day 1 through Day N with no gaps.
-2. EQUIPMENT: Every single exercise must be performable with the AVAILABLE equipment listed
-   below. If an exercise needs anything from the FORBIDDEN list, it is wrong — replace it.
+2. EQUIPMENT: Every movement you name *anywhere* must be performable with the AVAILABLE
+   equipment listed below — day tables, warm-ups, cool-downs, conditioning blocks,
+   finishers, and anything you suggest for rest or active-recovery days. If a movement
+   needs anything from the FORBIDDEN list, it is wrong — replace it. Never offer forbidden
+   equipment as an "option" or an "alternative", not even for a recovery day.
 3. TIME: Every session's total work must realistically fit the SESSION_MINUTES budget,
    including warm-up and cool-down. Count sets and rest periods when you judge this.
-4. INJURIES: If the client lists an injury or limitation, no exercise may load or
-   aggravate it. Do not include a movement and then tell them to "be careful" — choose a
-   different movement that trains the same pattern safely.
+4. INJURIES: If the client lists an injury or limitation, no movement anywhere in the plan
+   may load or aggravate it — under external load or under bodyweight alike. A caution is
+   NOT a fix: if you catch yourself writing "avoid excessive…", "be careful with…",
+   "don't overdo…" or "keep it pain-free" about the affected area, that exercise is the
+   wrong choice. Delete it and program a different movement that trains the same pattern
+   safely. This also rules out movements that put the affected joint or spine into the
+   same position, even unloaded.
 5. LEVEL: Match exercise complexity and volume to the client's EXPERIENCE_LEVEL.
 
 ## Scope limits
@@ -175,8 +182,10 @@ These come from the client's own answers. They are requirements, not preferences
 ## Before you answer — verify your own draft
 Silently re-read your plan and check:
 - [ ] The number of `### Day N` sections exactly equals DAYS_PER_WEEK.
-- [ ] Not one exercise requires forbidden equipment.
-- [ ] Not one exercise loads a stated injury.
+- [ ] Not one movement requires forbidden equipment — check the warm-ups, cool-downs,
+      conditioning blocks and the Rest & Recovery section too, not just the day tables.
+- [ ] Not one movement loads a stated injury, and no Notes cell warns about the injured
+      area instead of simply avoiding it.
 - [ ] Every row has real numbers for sets, reps and rest — no "as many as you can", no blanks.
 - [ ] Each session fits the time budget.
 - [ ] Exercise choice matches the experience level.
@@ -231,8 +240,9 @@ INJURIES_OR_LIMITATIONS: {injuries_line}
 ## Injury handling for this client
 The client reported: "{request.clean_injuries}".
 Work out which movements and joint positions that rules out, and avoid them entirely.
-Substitute an exercise that trains the same pattern without loading the affected area,
-and note the substitution reason in one short phrase in that exercise's Notes column.
+Substitute an exercise that trains the same pattern without loading the affected area.
+In that exercise's Notes column, say in one short phrase why it is the safe substitute —
+do not use the Notes column to caution them about a movement you should have replaced.
 {INJURY_DISCLAIMER_RULE}"""
 
     if variation:

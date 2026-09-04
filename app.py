@@ -237,10 +237,15 @@ def main() -> None:
 
     if generate_clicked:
         run_generation(inputs, variation=False)
+        # `has_plan` above was evaluated before this click was handled, so the
+        # Regenerate button has already been rendered as disabled. Rerun so the
+        # script re-evaluates it against the plan we just stored.
+        st.rerun()
     elif regenerate_clicked:
         # Regenerate from the inputs that produced the current plan, so editing a
         # widget without pressing Generate can't silently change what varies.
         run_generation(st.session_state.plan_inputs or inputs, variation=True)
+        st.rerun()
 
     result: GenerationResult | None = st.session_state.plan
     if result is None:

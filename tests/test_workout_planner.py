@@ -17,6 +17,7 @@ from groq import (
     AuthenticationError,
     BadRequestError,
     InternalServerError,
+    NotFoundError,
     RateLimitError,
 )
 
@@ -166,7 +167,8 @@ def test_matching_day_count_produces_no_warnings():
         (AuthenticationError, "rejected the API key"),
         (RateLimitError, "rate-limiting"),
         (APIConnectionError, "Couldn't reach Groq"),
-        (BadRequestError, "retired"),
+        (NotFoundError, "retired"),
+        (BadRequestError, "rejected the request"),
         (InternalServerError, "server-side error"),
         (ValueError, "Something unexpected"),
     ],

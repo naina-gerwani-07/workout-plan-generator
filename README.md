@@ -18,7 +18,7 @@ rule for the next four weeks, and a safety note if you mentioned a limitation.
 | | |
 |---|---|
 | **Structured inputs** | Goal, experience level, days/week, minutes/session, equipment access, optional injuries |
-| **Model** | `llama-3.3-70b-versatile` on Groq (switchable to `openai/gpt-oss-120b` or `llama-3.1-8b-instant`) |
+| **Model** | `openai/gpt-oss-120b` on Groq (switchable to `qwen/qwen3.8-27b` or `openai/gpt-oss-20b`) |
 | **Extras** | Regenerate for a different plan · plan persists across reruns · download as `.md` · swap a single exercise |
 
 ---
@@ -61,7 +61,7 @@ workout-plan-generator/
 ├── models.py         # Enums + WorkoutRequest dataclass + input validation
 ├── prompts.py        # System prompt, rule blocks, prompt builders  ← the real work
 ├── groq_client.py    # Typed generate_workout_plan(), API + response error handling
-├── tests/            # 35 offline tests covering validation, prompts, error paths
+├── tests/            # 42 offline tests — logic, prompts, error paths, and the UI
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -170,9 +170,76 @@ carries a standing one.
 
 ### Iteration log
 
-_Filled in from real Groq responses — see the test inputs and what each one exposed._
+Five adversarial input combinations were run against the live API and audited
+**programmatically** rather than by eye — a script checked each reply for day count,
+day numbering, forbidden-equipment keywords, injury-contraindicated keywords, vague
+prescriptions ("AMRAP", "as many as you can"), table structure, the conditional
+disclaimer, and medical overreach.
 
-<!-- ITERATION_LOG -->
+| # | Input combination | Why it's hard |
+|---|---|---|
+| A | Build muscle · beginner · 2 days · no equipment · 30 min · *bad knees, no jumping* | Minimal equipment plus a movement ban |
+| B | Lose fat · beginner · **7 days** · full gym · 60 min | Tempts over-programming a novice |
+| C | Build muscle · advanced · 6 days · full gym · **20 min** | Tiny time budget vs. high training age |
+| D | Endurance · intermediate · 4 days · home dumbbells · *shoulder impingement, no overhead pressing* | Endurance goal with no cardio machines |
+| E | Lose fat · intermediate · 5 days · no equipment · *post lumbar surgery, no spinal loading or bending* | Hardest: bodyweight-only with a spinal contraindication |
+
+**Round 1 — 4 of 5 clean.** Day counts were correct in every case, including the 7-day
+and 6-day requests; no vague prescriptions appeared anywhere; the conditional disclaimer
+fired exactly when injuries were present and never otherwise. Case E produced two real
+violations:
+
+1. **A caution offered in place of a substitution.** The plan contained
+   `| Superman (prone arm/leg lift) | 3 | 12-15 | 45 s | Posterior chain, avoid excessive lumbar arch |`
+   — a loaded spinal extension prescribed to someone who had said *no spinal loading or
+   bending*, softened with a warning. The prompt already forbade exactly this, and the
+   model did it anyway; the instruction wasn't concrete enough about what the evasion
+   looks like.
+2. **The constraint leaked outside the day tables.** The equipment forbid-list was
+   honoured perfectly across all five day tables, then broke in **Rest & Recovery**:
+   *"a 20-min easy bike/elliptical session"*. The model doesn't classify
+   active-recovery suggestions as "exercises", so a rule about exercises didn't reach them.
+
+**The fixes:**
+
+| Violation | Change |
+|---|---|
+| Caution instead of substitution | The injury rule now says *"A caution is NOT a fix"* and quotes the actual hedges the model reaches for — "avoid excessive…", "be careful with…", "don't overdo…" — declaring that writing one is itself proof the exercise is wrong. Extended to unloaded positions, not just loaded ones. |
+| Recovery-section leak | The equipment rule now enumerates its scope: day tables, warm-ups, cool-downs, conditioning blocks, finishers, *and* rest/active-recovery days — plus "never offer forbidden equipment as an 'option' or an 'alternative'". |
+| Both | The self-verification checklist now names the leaky sections explicitly and adds: *"no Notes cell warns about the injured area instead of simply avoiding it."* |
+
+**Round 2 — 5 of 5 clean.** Same five inputs, zero equipment violations, zero injury
+violations, correct day counts, disclaimer behaviour intact. Case E's plan replaced the
+Superman with knee- and spine-safe alternatives and dropped the elliptical suggestion.
+
+### Two things the iteration taught me about *auditing* prompts
+
+- **Keyword matching without context produces false alarms.** The audit flagged
+  `| Incline Push-Up | … | Chest emphasis, no overhead |` and *"avoids any knee-stressful
+  or jumping movements"* as violations. Both were the model **confirming** compliance.
+  Every flag needs reading in context before it counts.
+- **Normalise unicode before matching.** `gpt-oss` writes non-breaking hyphens (U+2011)
+  and narrow no-break spaces (U+202F), so searching for `"pull-up bar"` silently misses
+  `"pull‑up bar"`. A prompt audit that isn't dash-normalised will report success it hasn't
+  earned.
+
+### A bug the UI tests caught
+
+`has_plan` is evaluated at the top of the script, but Streamlit re-executes the whole
+file on every interaction, and a widget rendered *before* the click is handled keeps
+whatever state it was given. So the Regenerate button rendered as `disabled` in the
+very run that produced the plan, and stayed greyed out until the user happened to touch
+another widget. Fixed with an explicit `st.rerun()` after a generation, so the script
+re-evaluates the button against the plan it just stored. Locked down by
+`test_generating_renders_the_plan_and_enables_the_extras`.
+
+### On the regenerate button
+
+Same inputs at a higher temperature with the variation instruction gave **16% exercise
+overlap** (5 shared of 31 distinct movements) — genuinely different work, not a reshuffle.
+The *split* stayed Push/Pull/Legs both times, which is reasonable: at 3 days there is
+really only one sensible structure, and varying it just to look different would make the
+plan worse.
 
 ### What I'd watch next
 
@@ -197,12 +264,24 @@ Three layers, each producing a friendly message and never a traceback.
 `GenerationResult` with `ok`, `text`, `error` and `warnings`, so the UI has exactly
 one shape to render and no path to an unhandled exception.
 
+### Both of these fired for real during development
+
+- **A retired model.** The original default was `llama-3.3-70b-versatile`, taken from
+  Groq's own docs page — every call returned `404 … does not exist or you do not have
+  access to it`. The error layer caught it without crashing, but reported it as a generic
+  API error, because a 404 is `NotFoundError` and I had only mapped `BadRequestError`.
+  Now `NotFoundError` has its own branch telling the user to pick another model, and the
+  live list is worth checking with `client.models.list()` rather than trusting the docs.
+- **A real rate limit.** Running five plans back to back on the free tier tripped
+  `RateLimitError` mid-audit. The friendly message appeared exactly as intended, which is
+  the one error path that's genuinely awkward to test on purpose.
+
 ---
 
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # 35 passed
+.venv/bin/python -m pytest -q     # 42 passed
 ```
 
 No API key and no network needed — the Groq call is stubbed. Coverage:
@@ -215,11 +294,18 @@ No API key and no network needed — the Groq call is stubbed. Coverage:
 - each Groq exception type mapping to its friendly message
 - invalid input asserted **never** to reach the API
 
+`tests/test_app_ui.py` additionally drives the real Streamlit app through
+`streamlit.testing.v1.AppTest` with the API stubbed, covering the wiring unit tests
+can't see: that widget values actually arrive at `generate_workout_plan`, that
+Regenerate is disabled until a plan exists and enabled immediately after one, that it
+requests a variation at a higher temperature, and that a failed call renders an error
+banner with no plan leaking through. That last group caught a real bug — see below.
+
 ---
 
 ## Tech stack
 
-Python 3.10 · Streamlit · Groq (`llama-3.3-70b-versatile`) · python-dotenv · pytest
+Python 3.10 · Streamlit · Groq (`openai/gpt-oss-120b`) · python-dotenv · pytest
 
 ---
 

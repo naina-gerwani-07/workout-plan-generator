@@ -25,6 +25,7 @@ from groq import (
     BadRequestError,
     Groq,
     InternalServerError,
+    NotFoundError,
     RateLimitError,
 )
 
@@ -33,13 +34,18 @@ from prompts import SYSTEM_PROMPT, build_swap_prompt, build_user_prompt
 
 load_dotenv()
 
-# Llama 3.3 70B follows multi-constraint instructions noticeably better than the
-# 8B model, which is what this app lives or dies on. 8B is offered as a fast fallback.
-DEFAULT_MODEL: Final[str] = "llama-3.3-70b-versatile"
+# GPT-OSS 120B is the strongest instruction-follower currently served by Groq, and
+# this app lives or dies on multi-constraint compliance. The smaller models are
+# offered as faster fallbacks for when the 120B is rate-limited.
+#
+# Model ids on Groq do get retired — `llama-3.3-70b-versatile` was the default here
+# until it started returning 404. Verify the live list with `client.models.list()`
+# rather than trusting the docs, and see the NotFoundError branch below.
+DEFAULT_MODEL: Final[str] = "openai/gpt-oss-120b"
 AVAILABLE_MODELS: Final[tuple[str, ...]] = (
-    "llama-3.3-70b-versatile",
     "openai/gpt-oss-120b",
-    "llama-3.1-8b-instant",
+    "qwen/qwen3.8-27b",
+    "openai/gpt-oss-20b",
 )
 
 REQUEST_TIMEOUT_SECONDS: Final[float] = 60.0
@@ -119,10 +125,17 @@ def _friendly_api_error(exc: Exception) -> str:
         return (
             "Couldn't reach Groq. Check your internet connection and try again."
         )
+    if isinstance(exc, NotFoundError):
+        # Groq retires model ids periodically; a 404 almost always means the model
+        # id is gone rather than that anything is wrong with the request.
+        return (
+            "That model isn't available on your Groq account — model ids get "
+            "retired periodically. Pick a different model in Advanced settings."
+        )
     if isinstance(exc, BadRequestError):
         return (
-            "Groq rejected the request — the selected model may have been retired. "
-            "Pick a different model in Advanced settings."
+            "Groq rejected the request. If you changed the model, try another one "
+            "in Advanced settings."
         )
     if isinstance(exc, InternalServerError):
         return "Groq had a server-side error. This is usually temporary — try again."
